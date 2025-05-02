@@ -8,28 +8,27 @@ export const verifyPinFromKeypad = async (req, res) => {
   const { pin } = req.body;
 
   const result = await pool.query(`
-    SELECT DISTINCT ON (user_id) user_id, new_pin_hash
-    FROM pin_updates
-    ORDER BY user_id, timestamp DESC
+    SELECT * FROM global_pin
+    ORDER BY updated_at DESC
+    LIMIT 1
   `);
 
-  for (const row of result.rows) {
-    const match = await bcrypt.compare(pin, row.new_pin_hash);
-    if (match) {
-      const userId = row.user_id;
-
-      // Optional: log access
-      await pool.query(`
-        INSERT INTO access_logs (user_id, method)
-        VALUES ($1, 'keypad')
-      `, [userId]);
-
-      await notificationService.logToDb(userId, 'Access granted via keypad', 'log');
-
-      return res.status(200).json({ access: true, userId });
-    }
+  if (result.rowCount === 0) {
+    return res.status(404).json({ error: 'No global PIN set' });
   }
 
-  await notificationService.logToDb(null, 'Invalid PIN attempt at keypad', 'alert', 'warning');
-  return res.status(401).json({ access: false });
+  const { updated_by, pin_hash } = result.rows[0];
+  const match = await bcrypt.compare(pin, pin_hash);
+
+  if (match) {
+    await pool.query(`
+      INSERT INTO access_logs (user_id, method) VALUES ($1, 'keypad')
+    `, [updated_by]);
+
+    await notificationService.logToDb(updated_by, 'Access granted via global PIN', 'log');
+    return res.status(200).json({ access: true, userId: updated_by });
+  } else {
+    await notificationService.logToDb(null, 'Failed global PIN attempt', 'alert', 'warning');
+    return res.status(401).json({ access: false });
+  }
 };

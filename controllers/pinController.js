@@ -1,53 +1,76 @@
 // controllers/pinController.js
 
-import bcrypt from 'bcrypt';
-import { pool } from '../config/db.js';
-import * as notificationService from '../services/notificationService.js';
+import bcrypt from "bcrypt";
+import { pool } from "../config/db.js";
+import * as notificationService from "../services/notificationService.js";
 
 export const setPin = async (req, res) => {
   const { userId, pin } = req.body;
+
+  // ✅ Check if user is an admin
+  const userResult = await pool.query(`SELECT role FROM users WHERE id = $1`, [
+    userId,
+  ]);
+
+  if (userResult.rowCount === 0) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  const { role } = userResult.rows[0];
+  if (role !== "admin") {
+    await notificationService.logToDb(
+      userId,
+      "Unauthorized PIN update attempt",
+      "alert",
+      "critical"
+    );
+    return res
+      .status(403)
+      .json({ error: "Only admins can set the global PIN" });
+  }
+
   const hash = await bcrypt.hash(pin, 10);
+  await pool.query(`DELETE FROM global_pin`);
   await pool.query(
-    `INSERT INTO pin_updates (user_id, new_pin_hash) VALUES ($1, $2)`,
+    `INSERT INTO global_pin (updated_by, pin_hash) VALUES ($1, $2)`,
     [userId, hash]
   );
-  await notificationService.logToDb(userId, 'PIN set', 'system');
-  res.status(200).json({ message: "PIN set successfully" });
+
+  await notificationService.logToDb(userId, "Global PIN updated", "system");
+  res.status(200).json({ message: "Global PIN set successfully" });
+};
+
+export const updatePin = setPin; // Same logic — overwrite old one
+
+export const deletePin = async (req, res) => {
+  await pool.query(`DELETE FROM global_pin`);
+  await notificationService.logToDb(null, "Global PIN deleted", "system");
+  res.status(200).json({ message: "Global PIN deleted" });
 };
 
 export const verifyPin = async (req, res) => {
-  const { userId, pin } = req.body;
+  const { pin } = req.body;
   const result = await pool.query(
-    `SELECT new_pin_hash FROM pin_updates WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 1`,
-    [userId]
+    `SELECT * FROM global_pin ORDER BY updated_at DESC LIMIT 1`
   );
 
   if (result.rowCount === 0) {
-    await notificationService.logToDb(userId, 'PIN verification failed — no PIN set', 'alert');
-    return res.status(404).json({ verified: false });
+    return res.status(404).json({ error: "No global PIN is set" });
   }
 
-  const match = await bcrypt.compare(pin, result.rows[0].new_pin_hash);
-  const message = match ? 'PIN verified' : 'Invalid PIN attempt';
-  const type = match ? 'log' : 'alert';
-  await notificationService.logToDb(userId, message, type);
-  res.status(match ? 200 : 401).json({ verified: match });
-};
+  const { updated_by, pin_hash } = result.rows[0];
+  const match = await bcrypt.compare(pin, pin_hash);
 
-export const updatePin = async (req, res) => {
-  const { userId, newPin } = req.body;
-  const hash = await bcrypt.hash(newPin, 10);
-  await pool.query(
-    `INSERT INTO pin_updates (user_id, new_pin_hash) VALUES ($1, $2)`,
-    [userId, hash]
-  );
-  await notificationService.logToDb(userId, 'PIN updated', 'system');
-  res.status(200).json({ message: "PIN updated" });
-};
-
-export const deletePin = async (req, res) => {
-  const { userId } = req.body;
-  await pool.query(`DELETE FROM pin_updates WHERE user_id = $1`, [userId]);
-  await notificationService.logToDb(userId, 'PIN deleted', 'system');
-  res.status(200).json({ message: "PIN deleted" });
+  if (match) {
+    await notificationService.logToDb(updated_by, "Global PIN verified", "log");
+    res.status(200).json({ verified: true, userId: updated_by });
+  } else {
+    await notificationService.logToDb(
+      null,
+      "Invalid global PIN attempt",
+      "alert",
+      "warning"
+    );
+    res.status(401).json({ verified: false });
+  }
 };
