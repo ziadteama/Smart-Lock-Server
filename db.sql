@@ -46,3 +46,7 @@ CREATE TABLE notifications (
     sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(20) DEFAULT 'sent'
 );
+
+SELECT DISTINCT ON (user_id) user_id, new_pin_hash
+FROM pin_updates
+ORDER BY user_id, timestamp DESC;
