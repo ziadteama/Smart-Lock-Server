@@ -50,3 +50,12 @@ CREATE TABLE notifications (
 SELECT DISTINCT ON (user_id) user_id, new_pin_hash
 FROM pin_updates
 ORDER BY user_id, timestamp DESC;
+
+
+DROP TABLE IF EXISTS pin_updates;
+CREATE TABLE global_pin (
+    id SERIAL PRIMARY KEY,
+    updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    pin_hash TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
