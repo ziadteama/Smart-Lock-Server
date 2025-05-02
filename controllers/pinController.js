@@ -1,48 +1,53 @@
 // controllers/pinController.js
 
 import bcrypt from 'bcrypt';
+import { pool } from '../config/db.js';
 import * as notificationService from '../services/notificationService.js';
-
-const pinStore = new Map(); // Simulated DB: key = userId, value = hashed PIN
 
 export const setPin = async (req, res) => {
   const { userId, pin } = req.body;
-  const hashedPin = await bcrypt.hash(pin, 10);
-  pinStore.set(userId, hashedPin);
-  await notificationService.logEvent(userId, 'PIN set');
+  const hash = await bcrypt.hash(pin, 10);
+  await pool.query(
+    `INSERT INTO pin_updates (user_id, new_pin_hash) VALUES ($1, $2)`,
+    [userId, hash]
+  );
+  await notificationService.logToDb(userId, 'PIN set', 'system');
   res.status(200).json({ message: "PIN set successfully" });
 };
 
 export const verifyPin = async (req, res) => {
   const { userId, pin } = req.body;
-  const storedHash = pinStore.get(userId);
+  const result = await pool.query(
+    `SELECT new_pin_hash FROM pin_updates WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 1`,
+    [userId]
+  );
 
-  if (!storedHash) {
-    await notificationService.logEvent(userId, 'PIN not found');
-    return res.status(404).json({ error: 'PIN not set' });
+  if (result.rowCount === 0) {
+    await notificationService.logToDb(userId, 'PIN verification failed — no PIN set', 'alert');
+    return res.status(404).json({ verified: false });
   }
 
-  const match = await bcrypt.compare(pin, storedHash);
-  if (match) {
-    await notificationService.logEvent(userId, 'PIN verified');
-    res.status(200).json({ verified: true });
-  } else {
-    await notificationService.logEvent(userId, 'Invalid PIN attempt');
-    res.status(401).json({ verified: false });
-  }
+  const match = await bcrypt.compare(pin, result.rows[0].new_pin_hash);
+  const message = match ? 'PIN verified' : 'Invalid PIN attempt';
+  const type = match ? 'log' : 'alert';
+  await notificationService.logToDb(userId, message, type);
+  res.status(match ? 200 : 401).json({ verified: match });
 };
 
 export const updatePin = async (req, res) => {
   const { userId, newPin } = req.body;
-  const hashed = await bcrypt.hash(newPin, 10);
-  pinStore.set(userId, hashed);
-  await notificationService.logEvent(userId, 'PIN updated');
+  const hash = await bcrypt.hash(newPin, 10);
+  await pool.query(
+    `INSERT INTO pin_updates (user_id, new_pin_hash) VALUES ($1, $2)`,
+    [userId, hash]
+  );
+  await notificationService.logToDb(userId, 'PIN updated', 'system');
   res.status(200).json({ message: "PIN updated" });
 };
 
 export const deletePin = async (req, res) => {
   const { userId } = req.body;
-  pinStore.delete(userId);
-  await notificationService.logEvent(userId, 'PIN deleted');
+  await pool.query(`DELETE FROM pin_updates WHERE user_id = $1`, [userId]);
+  await notificationService.logToDb(userId, 'PIN deleted', 'system');
   res.status(200).json({ message: "PIN deleted" });
 };

@@ -3,46 +3,51 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { pool } from '../config/db.js';
 import * as faceRecognitionService from '../services/faceRecognitionService.js';
 import * as notificationService from '../services/notificationService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const facesDir = path.join(__dirname, '../faces');
 
-if (!fs.existsSync(facesDir)) {
-  fs.mkdirSync(facesDir);
-}
+if (!fs.existsSync(facesDir)) fs.mkdirSync(facesDir);
 
 export const registerFace = async (req, res) => {
   const { userId, base64Image } = req.body;
-  const imageBuffer = Buffer.from(base64Image, 'base64');
+  const buffer = Buffer.from(base64Image, 'base64');
   const filePath = path.join(facesDir, `${userId}.jpg`);
-  fs.writeFileSync(filePath, imageBuffer);
-  await notificationService.logEvent(userId, 'Face registered');
+  fs.writeFileSync(filePath, buffer);
+
+  await pool.query(
+    `INSERT INTO face_dataset (user_id, image_path)
+     VALUES ($1, $2)
+     ON CONFLICT (user_id)
+     DO UPDATE SET image_path = $2, last_updated = CURRENT_TIMESTAMP`,
+    [userId, filePath]
+  );
+
+  await notificationService.logToDb(userId, 'Face registered', 'system');
   res.status(200).json({ message: "Face registered" });
 };
 
 export const verifyFace = async (req, res) => {
   const { userId, base64Image } = req.body;
-  const match = await faceRecognitionService.compareFace(userId, base64Image);
+  const isMatch = await faceRecognitionService.compareFace(userId, base64Image);
 
-  if (match) {
-    await notificationService.logEvent(userId, 'Face verified');
-    res.status(200).json({ verified: true });
-  } else {
-    await notificationService.logEvent(userId, 'Face mismatch');
-    res.status(401).json({ verified: false });
-  }
+  const message = isMatch ? 'Face verified' : 'Face mismatch';
+  const type = isMatch ? 'log' : 'alert';
+  await notificationService.logToDb(userId, message, type);
+
+  res.status(isMatch ? 200 : 401).json({ verified: isMatch });
 };
 
 export const deleteFace = async (req, res) => {
   const { userId } = req.params;
-  const filePath = path.join(facesDir, `${userId}.jpg`);
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-    await notificationService.logEvent(userId, 'Face deleted');
-    res.status(200).json({ message: "Face deleted" });
-  } else {
-    res.status(404).json({ error: "No face found for user" });
-  }
+  const facePath = path.join(facesDir, `${userId}.jpg`);
+
+  if (fs.existsSync(facePath)) fs.unlinkSync(facePath);
+
+  await pool.query(`DELETE FROM face_dataset WHERE user_id = $1`, [userId]);
+  await notificationService.logToDb(userId, 'Face deleted', 'system');
+  res.status(200).json({ message: "Face deleted" });
 };
