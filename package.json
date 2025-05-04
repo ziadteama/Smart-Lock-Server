@@ -11,8 +11,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@tensorflow/tfjs-node": "^4.22.0",
-    "@vladmandic/face-api": "^1.7.15",
+    "@tensorflow/tfjs": "^4.22.0",
+    "@vladmandic/face-api": "github:vladmandic/face-api",
     "bcrypt": "^5.1.1",
     "canvas": "^3.1.0",
     "dotenv": "^16.5.0",
