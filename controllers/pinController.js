@@ -2,6 +2,7 @@
 
 import bcrypt from "bcrypt";
 import { pool } from "../config/db.js";
+
 import * as notificationService from "../services/notificationService.js";
 
 export const setPin = async (req, res) => {
