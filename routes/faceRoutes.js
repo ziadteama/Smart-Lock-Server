@@ -1,15 +1,12 @@
-// routes/faceRoutes.js
+import multer from 'multer';
+import express from 'express';
+import * as faceController from '../controllers/faceController.js';
 
-import { Router } from "express";
-import * as faceController from "../controllers/faceController.js";
-import requireLogin from "../middleware/requireLogin.js";
+const router = express.Router();
+const upload = multer(); // memory storage by default
 
-const router = Router();
-
-router.post("/register", requireLogin, faceController.registerFace);
-
-router.post("/verify", requireLogin, faceController.verifyFace);
-
-router.delete("/:userId", requireLogin, faceController.deleteFace);
+router.post('/register', upload.single('image'), faceController.registerFace);
+router.post('/verify', upload.single('image'), faceController.verifyFace);
+router.delete('/delete/:userId', faceController.deleteFace);
 
 export default router;
