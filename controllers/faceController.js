@@ -31,15 +31,19 @@ export const registerFace = async (req, res) => {
 };
 
 export const verifyFace = async (req, res) => {
-  const { userId, base64Image } = req.body;
-  const isMatch = await faceRecognitionService.compareFace(userId, base64Image);
-
-  const message = isMatch ? 'Face verified' : 'Face mismatch';
-  const type = isMatch ? 'log' : 'alert';
-  await notificationService.logToDb(userId, message, type);
-
-  res.status(isMatch ? 200 : 401).json({ verified: isMatch });
-};
+    const { userId, base64Image } = req.body;
+  
+    const result = await faceRecognitionService.compareFace(userId, base64Image);
+  
+    if (result.match) {
+      await notificationService.logToDb(userId, 'Face verified (match)', 'log');
+      return res.status(200).json({ verified: true, confidence: result.confidence });
+    } else {
+      await notificationService.logToDb(userId, 'Face mismatch', 'alert');
+      return res.status(401).json({ verified: false, confidence: result.confidence });
+    }
+  };
+  
 
 export const deleteFace = async (req, res) => {
   const { userId } = req.params;
