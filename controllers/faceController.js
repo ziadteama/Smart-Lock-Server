@@ -2,7 +2,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fetch from 'node-fetch';
 import FormData from 'form-data';
-import sharp from 'sharp'; // ⬅️ Install this if you haven't: npm i sharp
+import sharp from 'sharp';
 import { pool } from '../config/db.js';
 import * as notificationService from '../services/notificationService.js';
 
@@ -17,7 +17,6 @@ export const registerFace = async (req, res) => {
     return res.status(400).json({ error: 'userId and image are required' });
   }
 
-  // Resize image to 500px width to speed up face recognition
   const resizedBuffer = await sharp(imageFile.buffer)
     .resize({ width: 500 })
     .jpeg()
@@ -42,18 +41,18 @@ export const registerFace = async (req, res) => {
     return res.status(response.status).json({ error: data.error || 'Face registration failed' });
   }
 
+  // No need to store image path anymore — store minimal metadata
   await pool.query(
-    `INSERT INTO face_dataset (user_id, image_path)
-     VALUES ($1, $2)
+    `INSERT INTO face_dataset (user_id)
+     VALUES ($1)
      ON CONFLICT (user_id)
-     DO UPDATE SET image_path = $2, last_updated = CURRENT_TIMESTAMP`,
-    [userId, `in-memory/${userId}.jpg`]
+     DO UPDATE SET last_updated = CURRENT_TIMESTAMP`,
+    [userId]
   );
 
   await notificationService.logToDb(userId, 'Face registered', 'system');
   res.status(200).json({ message: "Face registered" });
 };
-
 
 export const verifyFace = async (req, res) => {
   const imageFile = req.file;
@@ -89,7 +88,6 @@ export const verifyFace = async (req, res) => {
     return res.status(401).json({ verified: false });
   }
 };
-
 
 export const deleteFace = async (req, res) => {
   const { userId } = req.params;

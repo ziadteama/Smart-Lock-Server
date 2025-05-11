@@ -59,3 +59,5 @@ CREATE TABLE global_pin (
     pin_hash TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE face_dataset DROP COLUMN image_path;
