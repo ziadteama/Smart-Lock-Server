@@ -1,34 +1,39 @@
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fetch from 'node-fetch';
 import FormData from 'form-data';
+import sharp from 'sharp'; // ⬅️ Install this if you haven't: npm i sharp
 import { pool } from '../config/db.js';
 import * as notificationService from '../services/notificationService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const facesDir = path.join(__dirname, '../faces');
-const PYTHON_MICROSERVICE_URL = 'http://localhost:5001'; // Adjust as needed
-
-if (!fs.existsSync(facesDir)) fs.mkdirSync(facesDir);
+const PYTHON_MICROSERVICE_URL = 'http://192.168.100.221:5001';
 
 export const registerFace = async (req, res) => {
   const { userId } = req.body;
-  const imageFile = req.file; // Multer must be used in the route middleware
+  const imageFile = req.file;
 
-  const tempPath = path.join(facesDir, `${userId}.jpg`);
-  fs.writeFileSync(tempPath, imageFile.buffer);
+  if (!userId || !imageFile) {
+    return res.status(400).json({ error: 'userId and image are required' });
+  }
+
+  // Resize image to 500px width to speed up face recognition
+  const resizedBuffer = await sharp(imageFile.buffer)
+    .resize({ width: 500 })
+    .jpeg()
+    .toBuffer();
 
   const formData = new FormData();
   formData.append('name', userId);
-  formData.append('image', fs.createReadStream(tempPath), {
+  formData.append('image', resizedBuffer, {
     filename: `${userId}.jpg`,
-    contentType: imageFile.mimetype,
+    contentType: 'image/jpeg',
   });
 
   const response = await fetch(`${PYTHON_MICROSERVICE_URL}/register-face`, {
     method: 'POST',
     body: formData,
+    headers: formData.getHeaders(),
   });
 
   const data = await response.json();
@@ -42,41 +47,49 @@ export const registerFace = async (req, res) => {
      VALUES ($1, $2)
      ON CONFLICT (user_id)
      DO UPDATE SET image_path = $2, last_updated = CURRENT_TIMESTAMP`,
-    [userId, tempPath]
+    [userId, `in-memory/${userId}.jpg`]
   );
 
   await notificationService.logToDb(userId, 'Face registered', 'system');
   res.status(200).json({ message: "Face registered" });
 };
 
+
 export const verifyFace = async (req, res) => {
-  const { userId } = req.body;
   const imageFile = req.file;
 
-  const tempPath = path.join(facesDir, `verify-${userId}.jpg`);
-  fs.writeFileSync(tempPath, imageFile.buffer);
+  if (!imageFile) {
+    return res.status(400).json({ error: 'image is required' });
+  }
+
+  const resizedBuffer = await sharp(imageFile.buffer)
+    .resize({ width: 500 })
+    .jpeg()
+    .toBuffer();
 
   const formData = new FormData();
-  formData.append('image', fs.createReadStream(tempPath), {
-    filename: `verify-${userId}.jpg`,
-    contentType: imageFile.mimetype,
+  formData.append('image', resizedBuffer, {
+    filename: `verify.jpg`,
+    contentType: 'image/jpeg',
   });
 
   const response = await fetch(`${PYTHON_MICROSERVICE_URL}/verify-face`, {
     method: 'POST',
     body: formData,
+    headers: formData.getHeaders(),
   });
 
   const result = await response.json();
 
-  if (response.ok && result.match && result.user === userId) {
-    await notificationService.logToDb(userId, 'Face verified (match)', 'log');
-    return res.status(200).json({ verified: true });
+  if (response.ok && result.match) {
+    await notificationService.logToDb(result.user, 'Face verified (match)', 'log');
+    return res.status(200).json({ verified: true, user: result.user });
   } else {
-    await notificationService.logToDb(userId, 'Face mismatch', 'alert');
+    await notificationService.logToDb('unknown', 'Face mismatch', 'alert');
     return res.status(401).json({ verified: false });
   }
 };
+
 
 export const deleteFace = async (req, res) => {
   const { userId } = req.params;
