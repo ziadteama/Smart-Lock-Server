@@ -102,9 +102,6 @@ export const deleteFace = async (req, res) => {
     return res.status(response.status).json({ error: 'Failed to delete face in microservice' });
   }
 
-  const facePath = path.join(facesDir, `${userId}.jpg`);
-  if (fs.existsSync(facePath)) fs.unlinkSync(facePath);
-
   await pool.query(`DELETE FROM face_dataset WHERE user_id = $1`, [userId]);
   await notificationService.logToDb(userId, 'Face deleted', 'system');
   res.status(200).json({ message: "Face deleted" });
