@@ -81,12 +81,13 @@ export const verifyFace = async (req, res) => {
   const result = await response.json();
 
   if (response.ok && result.match) {
-    await notificationService.logToDb(result.user, 'Face verified (match)', 'log');
-    return res.status(200).json({ verified: true, user: result.user });
+    await notificationService.logToDb(result.user_id, 'Face verified (match)', 'log');
+    return res.status(200).json({ verified: true, user_id: result.user_id });
   } else {
     await notificationService.logToDb('unknown', 'Face mismatch', 'alert');
     return res.status(401).json({ verified: false });
   }
+  
 };
 
 export const deleteFace = async (req, res) => {
