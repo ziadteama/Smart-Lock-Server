@@ -81,10 +81,10 @@ export const verifyFace = async (req, res) => {
   const result = await response.json();
 
   if (response.ok && result.match) {
-    await notificationService.logToDb(result.user_id, 'Face verified (match)', 'log');
-    return res.status(200).json({ verified: true, user_id: result.user_id });
+    await notificationService.logToDb(result.userId, 'Face verified (match)', 'log');
+    return res.status(200).json({ verified: true, userId: result.userId });
   } else {
-    await notificationService.logToDb('unknown', 'Face mismatch', 'alert');
+    await notificationService.logToDb(null, 'Face mismatch', 'alert');
     return res.status(401).json({ verified: false });
   }
   
