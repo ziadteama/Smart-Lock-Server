@@ -7,7 +7,7 @@ import { pool } from '../config/db.js';
 import * as notificationService from '../services/notificationService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PYTHON_MICROSERVICE_URL = 'http://192.168.100.221:5001';
+const PYTHON_MICROSERVICE_URL = process.env.FACE_SERVICE_URL;;
 
 export const registerFace = async (req, res) => {
   const { userId } = req.body;
