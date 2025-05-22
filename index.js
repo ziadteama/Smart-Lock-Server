@@ -1,33 +1,51 @@
 // index.js
-import express from 'express';
-import pinRoutes from './routes/pinRoutes.js';
-import faceRoutes from './routes/faceRoutes.js';
-import keypadRoutes from './routes/keypadRoutes.js';
-import lockRoutes from './routes/lockRoutes.js';
 
-import {
-  connect,
-  subscribe
-} from './services/mqttService.js';
+import express from 'express';
+import session from 'express-session';
+import pgSession from 'connect-pg-simple';
+import passport from 'passport';
+import { pool } from './config/db.js';
+import './config/passport.js';
+import authRoutes from './routes/authRoutes.js';
 
 const app = express();
+const PORT = 3000;
+const HOST = '0.0.0.0'; // Listen on all network interfaces (LAN accessible)
+const LOCAL_IP = '172.16.0.252'; // Your actual local IP
+
+// Parse incoming JSON requests
 app.use(express.json());
 
-// Mount route modules
-app.use('/api/pin', pinRoutes);
-app.use('/api/face', faceRoutes);
-app.use('/api/keypad', keypadRoutes);
-app.use('/api/lock', lockRoutes);
+// Persistent session store using PostgreSQL
+const PgSession = pgSession(session);
 
-// Start server
-app.listen(3000, () => {
-  console.log("🚀 Server running on port 3000");
-});
+app.use(session({
+  store: new PgSession({
+    pool: pool,            // Use your existing pg Pool
+    tableName: 'session',  // Table name (will auto-create if missing)
+  }),
+  secret: 'your-session-secret',      // Change in production!
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false,                    // True only for HTTPS in production
+    maxAge: 7 * 24 * 60 * 60 * 1000   // 7 days (change as you like)
+  }
+}));
 
-// Connect to MQTT broker
-connect('mqtt://broker.hivemq.com');
+// Initialize Passport and session
+app.use(passport.initialize());
+app.use(passport.session());
 
-// Subscribe to ESP32 status updates
-subscribe('lock/status', (message) => {
-  console.log('📥 [ESP32 STATUS]:', message);
+// Mount your authentication routes
+app.use('/api/auth', authRoutes);
+
+// Health check/test route
+app.get('/', (req, res) => res.send('API is running!'));
+
+// Start server, listen on all network interfaces
+app.listen(PORT, HOST, () => {
+  console.log(`Server is running on http://${HOST}:${PORT}`);
+  console.log(`Accessible locally at: http://localhost:${PORT}/`);
+  console.log(`Accessible on your LAN at: http://${LOCAL_IP}:${PORT}/`);
 });

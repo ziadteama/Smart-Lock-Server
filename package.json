@@ -15,12 +15,16 @@
     "@vladmandic/face-api": "github:vladmandic/face-api",
     "bcrypt": "^6.0.0",
     "canvas": "^3.1.0",
+    "connect-pg-simple": "^10.0.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "express-session": "^1.18.1",
     "form-data": "^4.0.2",
     "mqtt": "^5.13.0",
     "multer": "^1.4.5-lts.2",
     "node-fetch": "^3.3.2",
+    "passport": "^0.7.0",
+    "passport-local": "^1.0.0",
     "pg": "^8.15.6",
     "sharp": "^0.34.1"
   }
