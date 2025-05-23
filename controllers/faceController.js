@@ -1,3 +1,5 @@
+// controllers/faceController.js
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fetch from 'node-fetch';
@@ -7,7 +9,12 @@ import { pool } from '../config/db.js';
 import * as notificationService from '../services/notificationService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PYTHON_MICROSERVICE_URL = process.env.FACE_SERVICE_URL;;
+const PYTHON_MICROSERVICE_URL = process.env.FACE_SERVICE_URL;
+
+// Helper to build relative image path for static serving
+function getImagePath(userId, filename) {
+  return `known_faces/${userId}/${filename}`;
+}
 
 export const registerFace = async (req, res) => {
   const { userId } = req.body;
@@ -17,18 +24,25 @@ export const registerFace = async (req, res) => {
     return res.status(400).json({ error: 'userId and image are required' });
   }
 
+  // Resize image and convert to JPEG
   const resizedBuffer = await sharp(imageFile.buffer)
     .resize({ width: 500 })
     .jpeg()
     .toBuffer();
 
+  // Build filename and image path
+  const filename = `${userId}.jpg`;
+  const relativeImagePath = getImagePath(userId, filename);
+
+  // Prepare form-data for Python microservice
   const formData = new FormData();
   formData.append('name', userId);
   formData.append('image', resizedBuffer, {
-    filename: `${userId}.jpg`,
+    filename: filename,
     contentType: 'image/jpeg',
   });
 
+  // Send image to Python microservice for registration
   const response = await fetch(`${PYTHON_MICROSERVICE_URL}/register-face`, {
     method: 'POST',
     body: formData,
@@ -41,17 +55,21 @@ export const registerFace = async (req, res) => {
     return res.status(response.status).json({ error: data.error || 'Face registration failed' });
   }
 
-  // No need to store image path anymore — store minimal metadata
+  // Store image_path in the DB for this user
   await pool.query(
-    `INSERT INTO face_dataset (user_id)
-     VALUES ($1)
+    `INSERT INTO face_dataset (user_id, image_path)
+     VALUES ($1, $2)
      ON CONFLICT (user_id)
-     DO UPDATE SET last_updated = CURRENT_TIMESTAMP`,
-    [userId]
+     DO UPDATE SET image_path = $2, last_updated = CURRENT_TIMESTAMP`,
+    [userId, relativeImagePath]
   );
 
   await notificationService.logToDb(userId, 'Face registered', 'system');
-  res.status(200).json({ message: "Face registered" });
+  res.status(200).json({ 
+  message: "Face registered", 
+  image_path: relativeImagePath 
+});
+
 };
 
 export const verifyFace = async (req, res) => {
@@ -87,7 +105,6 @@ export const verifyFace = async (req, res) => {
     await notificationService.logToDb(null, 'Face mismatch', 'alert');
     return res.status(401).json({ verified: false });
   }
-  
 };
 
 export const deleteFace = async (req, res) => {

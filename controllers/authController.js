@@ -6,7 +6,7 @@ import passport from 'passport';
 
 // SIGNUP — Register a new user with name, email, password, and role
 export const signup = async (req, res) => {
-  const { email, password, name, role = 'user' } = req.body;
+  const { email, password, name, role = 'resident' } = req.body;
   if (!email || !password || !name) {
     return res.status(400).json({
       success: false,
