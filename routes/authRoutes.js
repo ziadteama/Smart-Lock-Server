@@ -1,11 +1,6 @@
+// routes/authRoutes.js
 import express from 'express';
-import {
-  signup,
-  login,
-  logout,
-  getCurrentUser
-} from '../controllers/authController.js';
-import { requireLogin } from '../middlewares/requireLogin.js';
+import { login, logout, signup, getCurrentUser, requireJWT } from '../controllers/authController.js';
 
 const router = express.Router();
 
@@ -14,7 +9,7 @@ router.post('/signup', signup);
 router.post('/login', login);
 
 // Protected routes
-router.post('/logout', requireLogin, logout);
-router.get('/current_user', requireLogin, getCurrentUser);
+router.post('/logout', requireJWT, logout);
+router.get('/current_user', requireJWT, getCurrentUser);
 
 export default router;

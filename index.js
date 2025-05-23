@@ -1,16 +1,13 @@
 // index.js
 
 import express from 'express';
-import session from 'express-session';
-import passport from 'passport';
 import cors from 'cors';
 import os from 'os';
 import path from 'path';
 import { pool } from './config/db.js';
-import './config/passport.js';
 import authRoutes from './routes/authRoutes.js';
 import faceRoutes from './routes/faceRoutes.js';
-import userRoutes from './routes/userRoutes.js'; // <-- ADD THIS LINE
+import userRoutes from './routes/userRoutes.js';
 
 const app = express();
 const PORT = 3000;
@@ -64,28 +61,13 @@ app.use(cors({
 // ====== BODY PARSER ======
 app.use(express.json());
 
-// ====== SESSION CONFIGURATION ======
-app.use(session({
-  secret: 'your-session-secret', // Change this in production!
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: false, // True only for HTTPS in production
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-  }
-}));
-
-// ====== PASSPORT ======
-app.use(passport.initialize());
-app.use(passport.session());
-
 // ====== SERVE FACE IMAGES STATICALLY ======
 app.use('/faces', express.static(path.join(process.cwd(), 'known_faces')));
 
 // ====== ROUTES ======
 app.use('/api/auth', authRoutes);
 app.use('/api/face', faceRoutes);
-app.use('/api/users', userRoutes); // <-- MOUNT THE USER ROUTES
+app.use('/api/users', userRoutes);
 
 // Health check/test route
 app.get('/', (req, res) => res.send('API is running!'));

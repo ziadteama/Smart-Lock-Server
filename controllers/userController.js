@@ -1,19 +1,8 @@
-// controllers/userController.js
-
+import path from 'path';
 import { pool } from '../config/db.js';
 
-// Change this to your backend IP or use process.env for production!
-const BASE_URL = 'http://172.16.0.100:3000';
+const MICRO_SERVICE_BASE_URL = process.env.FACE_SERVICE_URL || 'http://172.16.0.100:5001';
 
-// Middleware to check admin (reusable)
-export const requireAdmin = (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ success: false, message: 'Forbidden: Admins only' });
-  }
-  next();
-};
-
-// Get all users (for admin)
 export const getAllUsers = async (req, res) => {
   try {
     const result = await pool.query(`
@@ -24,13 +13,18 @@ export const getAllUsers = async (req, res) => {
       LEFT JOIN face_dataset ON users.id = face_dataset.user_id
     `);
 
-    // Build photo_url for each user
-    const users = result.rows.map(user => ({
-      ...user,
-      photo_url: user.image_path
-        ? `${BASE_URL}/faces/${user.image_path.replace('known_faces/', '')}`
-        : null
-    }));
+    const users = result.rows.map(user => {
+      let photo_url = null;
+      if (user.image_path) {
+        // Replace backslashes with forward slashes for URLs
+        const urlPath = user.image_path.replace(/\\/g, '/');
+        photo_url = `${MICRO_SERVICE_BASE_URL}/${urlPath}`;
+      }
+      return {
+        ...user,
+        photo_url
+      };
+    });
 
     res.json({ success: true, users });
   } catch (err) {

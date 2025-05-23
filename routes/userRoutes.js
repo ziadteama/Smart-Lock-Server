@@ -1,11 +1,13 @@
 // routes/userRoutes.js
 import express from 'express';
-import { getAllUsers, requireAdmin } from '../controllers/userController.js';
-import { requireLogin } from '../middlewares/requireLogin.js';
+import { getAllUsers } from '../controllers/userController.js';
+import { requireJWT } from '../middlewares/requireJWT.js';
+import { requireRole } from '../middlewares/requireRole.js';
+
 
 const router = express.Router();
 
 // Only admins can access this endpoint
-router.get('/all', requireLogin, requireAdmin, getAllUsers);
+router.get('/all', requireJWT, requireRole('admin'), getAllUsers);
 
 export default router;

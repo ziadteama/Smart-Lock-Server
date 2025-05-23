@@ -1,77 +1,93 @@
-// controllers/authController.js
-
 import { pool } from '../config/db.js';
 import bcrypt from 'bcrypt';
-import passport from 'passport';
+import jwt from 'jsonwebtoken';
 
-// SIGNUP — Register a new user with name, email, password, and role
+const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key';
+const JWT_EXPIRES_IN = '7d'; // 7 days, change as needed
+
+// Signup controller
 export const signup = async (req, res) => {
   const { email, password, name, role = 'resident' } = req.body;
   if (!email || !password || !name) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email, name, and password required'
-    });
+    return res.status(400).json({ success: false, message: 'Email, name, and password required' });
   }
   try {
-    // Check if user exists
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length) {
-      return res.status(400).json({
-        success: false,
-        message: 'User already exists'
-      });
+      return res.status(400).json({ success: false, message: 'User already exists' });
     }
-
-    // Hash password and insert user
     const hash = await bcrypt.hash(password, 10);
-    const insertQuery = `
-      INSERT INTO users (email, password_hash, name, role)
-      VALUES ($1, $2, $3, $4)
-      RETURNING id, email, name, role
-    `;
-    const result = await pool.query(insertQuery, [email, hash, name, role]);
-    return res.status(201).json({ success: true, user: result.rows[0] });
+    const result = await pool.query(
+      'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
+      [email, hash, name, role]
+    );
+    const user = result.rows[0];
+    // Create JWT
+    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    res.status(201).json({ success: true, user, token });
   } catch (err) {
-    console.error('Signup error:', err);
-    return res.status(500).json({ success: false, message: 'Signup error' });
+    res.status(500).json({ success: false, message: 'Signup error' });
   }
 };
 
-// LOGIN — Authenticate and create session (returns user info)
-export const login = (req, res, next) => {
-  passport.authenticate('local', (err, user, info) => {
-    if (err) return next(err);
+// Login controller
+export const login = async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const userRes = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = userRes.rows[0];
     if (!user) {
-      return res.status(401).json({ success: false, message: info.message });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
-    req.logIn(user, (err) => {
-      if (err) return next(err);
-      // Only return safe user fields
-      const safeUser = {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role
-      };
-      return res.json({ success: true, message: 'Logged in', user: safeUser });
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+    // Create JWT
+    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    res.json({
+      success: true,
+      message: 'Logged in',
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      token
     });
-  })(req, res, next);
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Login error' });
+  }
 };
 
-// LOGOUT — Ends the user session
-export const logout = (req, res) => {
-  req.logout(err => {
-    if (err) return res.status(500).json({ success: false, message: 'Logout error' });
-    return res.json({ success: true, message: 'Logged out' });
-  });
+// Middleware to check JWT
+export const requireJWT = (req, res, next) => {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: 'No token provided' });
+  }
+  const token = auth.replace('Bearer ', '');
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded; // { id, role }
+    next();
+  } catch (err) {
+    return res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  }
 };
 
-// GET CURRENT USER — Return currently logged-in user
-export const getCurrentUser = (req, res) => {
+// Get current user (by JWT)
+export const getCurrentUser = async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ success: false, message: 'No user logged in' });
   }
-  const { id, email, name, role } = req.user;
-  return res.json({ success: true, user: { id, email, name, role } });
+  try {
+    const result = await pool.query('SELECT id, email, name, role FROM users WHERE id = $1', [req.user.id]);
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error fetching user' });
+  }
+};
+
+// Logout: JWT doesn’t require a server-side logout, just remove token on client!
+export const logout = (req, res) => {
+  res.json({ success: true, message: 'Logged out (delete token on client)' });
 };
