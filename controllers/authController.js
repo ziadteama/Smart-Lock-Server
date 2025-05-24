@@ -7,7 +7,7 @@ const JWT_EXPIRES_IN = '7d'; // 7 days, change as needed
 
 // Signup controller
 export const signup = async (req, res) => {
-  const { email, password, name, role = 'resident' } = req.body;
+  const { email, password, name, role = 'pending' } = req.body;
   if (!email || !password || !name) {
     return res.status(400).json({ success: false, message: 'Email, name, and password required' });
   }

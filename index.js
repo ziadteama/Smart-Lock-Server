@@ -1,5 +1,3 @@
-// index.js
-
 import express from 'express';
 import cors from 'cors';
 import os from 'os';
@@ -8,12 +6,15 @@ import { pool } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import faceRoutes from './routes/faceRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import pinRoutes from './routes/pinRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import * as mqttService from './services/mqttService.js';
 
 const app = express();
 const PORT = 3000;
 const HOST = '0.0.0.0'; // Listen on all interfaces (LAN)
 
-// ====== FUNCTION TO GET LOCAL NETWORK IP ======
+// ====== Get Local Network IP ======
 function getLocalIp() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
@@ -26,13 +27,11 @@ function getLocalIp() {
   return 'localhost';
 }
 
-// ====== DYNAMIC CORS CONFIGURATION FOR SUBNET ======
-// Accept any frontend from 172.20.8.x - 172.20.11.x (255.255.252.0 subnet)
+// ====== Dynamic CORS Configuration for subnet 172.20.8.x - 172.20.11.x ======
 function isAllowedSubnet(origin) {
   try {
     const { hostname } = new URL(origin);
     const parts = hostname.split('.').map(Number);
-    // Check 172.20.8.x to 172.20.11.x
     return (
       parts[0] === 172 &&
       parts[1] === 20 &&
@@ -41,14 +40,14 @@ function isAllowedSubnet(origin) {
       parts[3] >= 0 &&
       parts[3] <= 255
     );
-  } catch (e) {
+  } catch {
     return false;
   }
 }
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Allow non-browser requests (Postman, curl)
+    if (!origin) return callback(null, true); // Allow Postman, curl etc.
     if (isAllowedSubnet(origin)) {
       callback(null, true);
     } else {
@@ -58,21 +57,23 @@ app.use(cors({
   credentials: true
 }));
 
-// ====== BODY PARSER ======
+// ====== Body parser ======
 app.use(express.json());
 
-// ====== SERVE FACE IMAGES STATICALLY ======
+// ====== Serve static face images ======
 app.use('/faces', express.static(path.join(process.cwd(), 'known_faces')));
 
-// ====== ROUTES ======
+// ====== Mount routes ======
 app.use('/api/auth', authRoutes);
 app.use('/api/face', faceRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/pin', pinRoutes);
+app.use('/api/admin', adminRoutes);
 
-// Health check/test route
+// ====== Health check ======
 app.get('/', (req, res) => res.send('API is running!'));
 
-// ====== START SERVER ======
+// ====== Start server ======
 app.listen(PORT, HOST, () => {
   const localIp = getLocalIp();
   console.log(`Server is running on http://${HOST}:${PORT}`);
@@ -80,4 +81,9 @@ app.listen(PORT, HOST, () => {
   console.log(`Accessible on your LAN at: http://${localIp}:${PORT}/`);
   console.log('CORS is enabled for all in subnet 172.20.8.x to 172.20.11.x');
   console.log('Face images served from /faces/');
+
+  // ====== MQTT broker connection ======
+  const MQTT_BROKER_URL = 'mqtt://192.168.146.51:1883'; // your machine IP
+ // Change to your server IP if needed
+  mqttService.connect(MQTT_BROKER_URL);
 });

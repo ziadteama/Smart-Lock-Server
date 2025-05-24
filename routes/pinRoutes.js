@@ -1,14 +1,12 @@
-import { Router } from 'express';
-import * as pinController from '../controllers/pinController.js';
-import authMiddleware from '../middleware/requireLogin.js';
+// routes/pinRoutes.js
 
-const { requireLogin } = authMiddleware;
+import express from 'express';
+import { updateGlobalPin } from '../controllers/pinController.js';
+import { requireJWT } from '../middlewares/requireJWT.js'; // your JWT auth middleware
 
-const router = Router();
+const router = express.Router();
 
-router.post('/set', requireLogin, pinController.setPin);
-router.post('/verify', requireLogin, pinController.verifyPin);
-router.put('/update', requireLogin, pinController.updatePin);
-router.delete('/delete', requireLogin, pinController.deletePin);
+// Protect this route with JWT middleware
+router.post('/update', requireJWT, updateGlobalPin);
 
 export default router;

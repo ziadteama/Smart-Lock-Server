@@ -1,77 +1,43 @@
-// controllers/pinController.js
+import { pool } from '../config/db.js';
 
-import bcrypt from "bcrypt";
-import { pool } from "../config/db.js";
+export const updateGlobalPin = async (req, res) => {
+  const { oldPin, newPin } = req.body;
+  const userId = req.user.id; // assuming JWT middleware sets this
 
-import * as notificationService from "../services/notificationService.js";
-
-export const setPin = async (req, res) => {
-  const { userId, pin } = req.body;
-
-  // ✅ Check if user is an admin
-  const userResult = await pool.query(`SELECT role FROM users WHERE id = $1`, [
-    userId,
-  ]);
-
-  if (userResult.rowCount === 0) {
-    return res.status(404).json({ error: "User not found" });
+  if (!oldPin || !newPin) {
+    return res.status(400).json({ success: false, message: 'Both oldPin and newPin are required' });
   }
 
-  const { role } = userResult.rows[0];
-  if (role !== "admin") {
-    await notificationService.logToDb(
-      userId,
-      "Unauthorized PIN update attempt",
-      "alert",
-      "critical"
-    );
-    return res
-      .status(403)
-      .json({ error: "Only admins can set the global PIN" });
+  if (newPin.length < 4) {
+    return res.status(400).json({ success: false, message: 'New PIN must be at least 4 digits' });
   }
 
-  const hash = await bcrypt.hash(pin, 10);
-  await pool.query(`DELETE FROM global_pin`);
-  await pool.query(
-    `INSERT INTO global_pin (updated_by, pin_hash) VALUES ($1, $2)`,
-    [userId, hash]
-  );
+  try {
+    // Fetch current PIN from global_pin table
+    const result = await pool.query('SELECT pin FROM global_pin ORDER BY updated_at DESC LIMIT 1');
 
-  await notificationService.logToDb(userId, "Global PIN updated", "system");
-  res.status(200).json({ message: "Global PIN set successfully" });
-};
+    if (result.rowCount === 0) {
+      return res.status(400).json({ success: false, message: 'No existing PIN set' });
+    }
 
-export const updatePin = setPin; // Same logic — overwrite old one
+    const currentPin = result.rows[0].pin;
 
-export const deletePin = async (req, res) => {
-  await pool.query(`DELETE FROM global_pin`);
-  await notificationService.logToDb(null, "Global PIN deleted", "system");
-  res.status(200).json({ message: "Global PIN deleted" });
-};
+    // Compare oldPin directly
+    if (oldPin !== currentPin) {
+      return res.status(401).json({ success: false, message: 'Old PIN is incorrect' });
+    }
 
-export const verifyPin = async (req, res) => {
-  const { pin } = req.body;
-  const result = await pool.query(
-    `SELECT * FROM global_pin ORDER BY updated_at DESC LIMIT 1`
-  );
+    // Update global PIN record (insert or update)
+    await pool.query(`
+      INSERT INTO global_pin (updated_by, pin, updated_at)
+      VALUES ($1, $2, CURRENT_TIMESTAMP)
+      ON CONFLICT (id) DO UPDATE
+      SET pin = EXCLUDED.pin, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at
+    `, [userId, newPin]);
 
-  if (result.rowCount === 0) {
-    return res.status(404).json({ error: "No global PIN is set" });
-  }
-
-  const { updated_by, pin_hash } = result.rows[0];
-  const match = await bcrypt.compare(pin, pin_hash);
-
-  if (match) {
-    await notificationService.logToDb(updated_by, "Global PIN verified", "log");
-    res.status(200).json({ verified: true, userId: updated_by });
-  } else {
-    await notificationService.logToDb(
-      null,
-      "Invalid global PIN attempt",
-      "alert",
-      "warning"
-    );
-    res.status(401).json({ verified: false });
+    return res.json({ success: true, message: 'Global PIN updated successfully' });
+  } catch (err) {
+    console.error('Error updating PIN:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

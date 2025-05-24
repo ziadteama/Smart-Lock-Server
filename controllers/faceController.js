@@ -7,6 +7,7 @@ import FormData from 'form-data';
 import sharp from 'sharp';
 import { pool } from '../config/db.js';
 import * as notificationService from '../services/notificationService.js';
+import { sendPhotoNotification } from '../services/mqttService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PYTHON_MICROSERVICE_URL = process.env.FACE_SERVICE_URL;
@@ -65,11 +66,11 @@ export const registerFace = async (req, res) => {
   );
 
   await notificationService.logToDb(userId, 'Face registered', 'system');
-  res.status(200).json({ 
-  message: "Face registered", 
-  image_path: relativeImagePath 
-});
 
+  res.status(200).json({ 
+    message: "Face registered", 
+    image_path: relativeImagePath 
+  });
 };
 
 export const verifyFace = async (req, res) => {
@@ -79,17 +80,20 @@ export const verifyFace = async (req, res) => {
     return res.status(400).json({ error: 'image is required' });
   }
 
+  // Resize and convert image to JPEG
   const resizedBuffer = await sharp(imageFile.buffer)
     .resize({ width: 500 })
     .jpeg()
     .toBuffer();
 
+  // Prepare form-data for verification request
   const formData = new FormData();
   formData.append('image', resizedBuffer, {
     filename: `verify.jpg`,
     contentType: 'image/jpeg',
   });
 
+  // Call Python microservice for face verification
   const response = await fetch(`${PYTHON_MICROSERVICE_URL}/verify-face`, {
     method: 'POST',
     body: formData,
@@ -102,7 +106,12 @@ export const verifyFace = async (req, res) => {
     await notificationService.logToDb(result.userId, 'Face verified (match)', 'log');
     return res.status(200).json({ verified: true, userId: result.userId });
   } else {
+    // Log alert for mismatch
     await notificationService.logToDb(null, 'Face mismatch', 'alert');
+
+    // Send MQTT photo notification with image to alert admin
+    await sendPhotoNotification(null, 'Unauthorized access attempt', resizedBuffer);
+
     return res.status(401).json({ verified: false });
   }
 };
