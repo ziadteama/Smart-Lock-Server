@@ -8,7 +8,6 @@ import faceRoutes from './routes/faceRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import pinRoutes from './routes/pinRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
-import * as mqttService from './services/mqttService.js';
 
 const app = express();
 const PORT = 3000;
@@ -81,9 +80,4 @@ app.listen(PORT, HOST, () => {
   console.log(`Accessible on your LAN at: http://${localIp}:${PORT}/`);
   console.log('CORS is enabled for all in subnet 172.20.8.x to 172.20.11.x');
   console.log('Face images served from /faces/');
-
-  // ====== MQTT broker connection ======
-  const MQTT_BROKER_URL = 'mqtt://192.168.146.51:1883'; // your machine IP
- // Change to your server IP if needed
-  mqttService.connect(MQTT_BROKER_URL);
 });
