@@ -1,3 +1,7 @@
+// controllers/adminController.js
+
+import { pool } from '../config/db.js';  // add .js extension
+
 // Promote user from pending to resident (accept)
 export const acceptUser = async (req, res) => {
   const { userId } = req.params;

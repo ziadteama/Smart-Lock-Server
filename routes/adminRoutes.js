@@ -1,12 +1,18 @@
+// routes/adminRoutes.js
+
 import express from 'express';
-import { requireJWT } from '../middlewares/requireJWT.js';
-import { requireRole } from '../middlewares/requireRole.js';
 import { acceptUser, rejectUser } from '../controllers/adminController.js';
 
 const router = express.Router();
 
-// Only admins can accept or reject pending users
-router.post('/users/:userId/accept', requireJWT, requireRole('admin'), acceptUser);
-router.post('/users/:userId/reject', requireJWT, requireRole('admin'), rejectUser);
+// Accept user (PUT or POST)
+router.put('/users/:userId/accept', acceptUser);
+
+// Reject user (DELETE)
+router.delete('/users/:userId/reject', (req, res, next) => {
+  console.log('DELETE /users/:userId/reject called with userId:', req.params.userId);
+  next();
+}, rejectUser);
+
 
 export default router;

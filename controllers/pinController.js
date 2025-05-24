@@ -1,5 +1,22 @@
 import { pool } from '../config/db.js';
 
+export const getGlobalPin = async (req, res) => {
+  try {
+    const result = await pool.query('SELECT pin, updated_at FROM global_pin ORDER BY updated_at DESC LIMIT 1');
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'No PIN set yet' });
+    }
+
+    // Return the current PIN (or maybe omit pin for security, depends on use case)
+    // Here, for demo, we return it directly
+    return res.json({ success: true, pin: result.rows[0].pin, updated_at: result.rows[0].updated_at });
+  } catch (err) {
+    console.error('Error fetching PIN:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
 export const updateGlobalPin = async (req, res) => {
   const { oldPin, newPin } = req.body;
   const userId = req.user.id; // assuming JWT middleware sets this

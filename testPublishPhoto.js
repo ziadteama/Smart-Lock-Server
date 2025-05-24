@@ -1,38 +1,26 @@
-import mqtt from 'mqtt';
-import fs from 'fs';
-import path from 'path';
+import fetch from 'node-fetch';
 
-// MQTT broker URL (replace with your IP if needed)
-const MQTT_BROKER_URL = 'mqtt://192.168.146.51:3000'; 
+// Replace with your ESP32 device IP address
+const ESP_IP = 'http://192.168.146.128'; // change to your ESP32 IP
 
-// Connect to broker
-const client = mqtt.connect(MQTT_BROKER_URL);
+async function sendLockCommand(lock) {
+  const url = lock ? `${ESP_IP}/lock` : `${ESP_IP}/unlock`;
+  console.log(`Sending ${lock ? 'lock' : 'unlock'} command to ${url}`);
 
-client.on('connect', () => {
-  console.log('✅ Connected to MQTT broker');
-
-  // Read image file
-  const imagePath = path.resolve('test.jpg'); // Put a test.jpg file here
-  if (!fs.existsSync(imagePath)) {
-    console.error('Test image not found:', imagePath);
-    client.end();
-    return;
-  }
-
-  const imageBuffer = fs.readFileSync(imagePath);
-  const base64Image = imageBuffer.toString('base64');
-
-  // Publish to topic (e.g., "lock/verify/photo")
-  client.publish('lock/verify/photo', base64Image, (err) => {
-    if (err) {
-      console.error('Failed to publish photo:', err);
+  try {
+    const response = await fetch(url);
+    if (response.ok) {
+      console.log(`${lock ? 'Lock' : 'Unlock'} command succeeded`);
+      const text = await response.text();
+      console.log('Response:', text);
     } else {
-      console.log('📤 Photo published successfully');
+      console.error(`Failed to ${lock ? 'lock' : 'unlock'} door, status: ${response.status}`);
     }
-    client.end();
-  });
-});
+  } catch (err) {
+    console.error('Error sending lock command:', err);
+  }
+}
 
-client.on('error', (err) => {
-  console.error('MQTT Error:', err);
-});
+// Call the function to test locking or unlocking
+sendLockCommand(false); // unlock the door
+// sendLockCommand(true); // lock the door
