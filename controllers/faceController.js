@@ -7,7 +7,7 @@ import FormData from 'form-data';
 import sharp from 'sharp';
 import { pool } from '../config/db.js';
 import * as notificationService from '../services/notificationService.js';
-import { sendPhotoNotification } from '../services/mqttService.js';
+import { sendPhotoNotification } from '../services/accessService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PYTHON_MICROSERVICE_URL = process.env.FACE_SERVICE_URL;
